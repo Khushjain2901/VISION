@@ -76,13 +76,27 @@ const NightSurveillance: React.FC = () => {
     setActiveActions([]);
     if (videoRef.current) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'environment', width: 1280, height: 720 }
-        });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: { ideal: 1280 }, height: { ideal: 720 } }
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
         videoRef.current.srcObject = stream;
         videoRef.current.play();
-      } catch (err) {
+      } catch (err: any) {
         console.error("Webcam error:", err);
+        let message = "Could not access webcam.";
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          message = "Camera access is BLOCKED by your browser permissions.\n\nTo fix:\n1. Click the Lock/Sliders icon next to 'localhost:5173' in your browser address bar.\n2. Enable 'Camera' permission to Allow.\n3. Refresh the page (F5).";
+        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+          message = "Webcam is currently in use by another application.\n\nPlease close other apps using your webcam and try again.";
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          message = "No webcam hardware detected on this device.";
+        }
+        alert(message);
       }
     }
   };

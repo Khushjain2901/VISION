@@ -27,9 +27,19 @@ const HumanFaceDetection: React.FC = () => {
         setIsLive(true);
         setCameraMode('webcam');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error accessing camera:", err);
-      alert("Could not access camera. Please check permissions.");
+      let message = "Could not access camera.";
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        message = "Camera access is BLOCKED by your browser permissions.\n\nTo fix:\n1. Click the Lock/Sliders icon next to 'localhost:5173' in your browser address bar.\n2. Enable 'Camera' permission to Allow.\n3. Refresh the page (F5).";
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        message = "Webcam is currently in use by another application (e.g., Zoom, Teams, Camera App).\n\nPlease close other applications using your webcam and try again.";
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        message = "No webcam hardware detected on this device. Please connect a webcam.";
+      } else if (err.message) {
+        message += ` (${err.name}: ${err.message})`;
+      }
+      alert(message);
     }
   };
 

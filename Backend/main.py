@@ -312,34 +312,50 @@ ipcam_cap = None
 ipcam_latest_frame = None
 ipcam_running = False
 ipcam_thread = None
+ipcam_error = None
 
 class IPCamStartRequest(BaseModel):
     url: str
 
 def ipcam_daemon(url: str):
-    global ipcam_cap, ipcam_latest_frame, ipcam_running
+    global ipcam_cap, ipcam_latest_frame, ipcam_running, ipcam_error
+    ipcam_error = None
     ipcam_cap = cv2.VideoCapture(url)
     ipcam_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     
+    if not ipcam_cap.isOpened():
+        ipcam_error = f"Could not connect to video stream at {url}. Ensure phone and PC are on the same Wi-Fi network."
+        print(f"[IPCAM ERROR] {ipcam_error}")
+        return
+
+    consecutive_failures = 0
     while ipcam_running:
         ret, frame = ipcam_cap.read()
         if ret:
             ipcam_latest_frame = frame
+            consecutive_failures = 0
         else:
-            time.sleep(0.01)
+            consecutive_failures += 1
+            if consecutive_failures > 100:
+                ipcam_error = f"Stream disconnected from {url}."
+                print(f"[IPCAM ERROR] {ipcam_error}")
+                break
+            time.sleep(0.05)
             
     if ipcam_cap:
         ipcam_cap.release()
 
 @app.post("/api/face/ipcam/start")
 async def start_ipcam(req: IPCamStartRequest):
-    global ipcam_running, ipcam_thread
+    global ipcam_running, ipcam_thread, ipcam_error, ipcam_latest_frame
     if ipcam_running:
         # Stop existing stream if changing URL
         ipcam_running = False
         if ipcam_thread:
             ipcam_thread.join(timeout=2.0)
             
+    ipcam_latest_frame = None
+    ipcam_error = None
     ipcam_running = True
     ipcam_thread = threading.Thread(target=ipcam_daemon, args=(req.url,), daemon=True)
     ipcam_thread.start()
@@ -347,19 +363,22 @@ async def start_ipcam(req: IPCamStartRequest):
 
 @app.post("/api/face/ipcam/stop")
 async def stop_ipcam():
-    global ipcam_running, ipcam_thread, ipcam_latest_frame
+    global ipcam_running, ipcam_thread, ipcam_latest_frame, ipcam_error
     ipcam_running = False
     if ipcam_thread:
         ipcam_thread.join(timeout=1.0)
     ipcam_latest_frame = None
+    ipcam_error = None
     return JSONResponse(content={"status": "stopped"})
 
 @app.get("/api/face/ipcam/poll")
 async def poll_ipcam():
-    global ipcam_latest_frame
+    global ipcam_latest_frame, ipcam_error
     
     if ipcam_latest_frame is None:
-        return JSONResponse(status_code=503, content={"error": "No frame available yet", "detections": [], "frame_base64": None})
+        if ipcam_error:
+            return JSONResponse(status_code=400, content={"error": ipcam_error, "detections": [], "frame_base64": None})
+        return JSONResponse(status_code=503, content={"error": "Connecting to camera stream...", "detections": [], "frame_base64": None})
         
     try:
         # Copy to avoid race conditions

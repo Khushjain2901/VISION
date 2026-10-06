@@ -105,9 +105,17 @@ const VehicleANPR: React.FC = () => {
         setIsLive(true);
         setCameraMode('webcam');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Could not access camera.");
+      let message = "Could not access camera.";
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        message = "Camera access is BLOCKED by your browser permissions.\n\nTo fix:\n1. Click the Lock/Sliders icon next to 'localhost:5173' in your browser address bar.\n2. Enable 'Camera' permission to Allow.\n3. Refresh the page (F5).";
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        message = "Webcam is currently in use by another application.\n\nPlease close other apps using your webcam and try again.";
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        message = "No webcam hardware detected on this device.";
+      }
+      alert(message);
     }
   };
 
